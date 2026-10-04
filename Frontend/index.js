@@ -2,7 +2,7 @@
 const VOICES = {
   English: { Male: "Matthew", Female: "Alicia" },
   Hindi: { Male: "Aman", Female: "Namrita" },
-  Tamil: { Male: "Murali", Female: "Iniya" },
+  Tamil: { Male: "Murali", Female: "Abirami" },
   Telugu: { Male: "Zion", Female: "Josie" }
 };
 
@@ -148,8 +148,13 @@ const getApiEndpoint = () => {
 const GENERATE_AUDIO_GUIDE_API_URL = getApiEndpoint();
 
 generateButton.addEventListener('click', async () => {
+  if (!state.place) {
+    alert('Please click on a destination card to select a place first!');
+    return;
+  }
+
   generateButton.disabled = true;
-  generateButton.textContent = '⏳ Generating Audio...';
+  generateButton.textContent = '⏳ Generating AI Audio Guide...';
 
   try {
     const selectedLanguage = languageSelect.value;
@@ -167,31 +172,43 @@ generateButton.addEventListener('click', async () => {
       })
     });
 
-    if (!response.ok) throw new Error('Generation failed');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server responded with status ${response.status}`);
+    }
 
     const data = await response.json();
 
     // Update UI with Result
     transcriptText.textContent = data.description;
+    transcriptContent.classList.remove('hidden');
+    transcriptArrow.classList.add('rotate-180');
     audioSection.classList.remove('hidden');
 
     if (data.audioBase64) {
       audioPlayer.src = `data:audio/mp3;base64,${data.audioBase64}`;
       audioPlayer.load();
       audioPlayer.classList.remove('hidden');
-      generateButton.textContent = 'Listen to Audio';
+      audioPlayer.play().catch(e => console.log('Autoplay deferred:', e));
+      generateButton.textContent = '🔊 Regenerate Audio Guide';
+      generateButton.disabled = false;
     } else {
       audioPlayer.classList.add('hidden');
       generateButton.textContent = 'Audio Not Available';
+      generateButton.disabled = false;
     }
+
+    // Scroll to audio section smoothly
+    audioSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   } catch (err) {
     console.error(err);
-    alert('Generation failed. Please check your connection.');
+    alert('Generation Error: ' + err.message);
     generateButton.textContent = 'Generate Audio Guide';
     generateButton.disabled = false;
   }
 });
+
 
 // Transcript Toggle
 transcriptToggle.addEventListener('click', () => {

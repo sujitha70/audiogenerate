@@ -66,13 +66,32 @@ Respond ONLY in {language}.
 }
 
 
+# Dynamic Murf & Gemini configuration
+def get_gemini_client():
+    key = os.getenv("GEMINI_API_KEY")
+    if not key or not genai:
+        return None
+    return genai.Client(api_key=key)
+
+
+# Fallback aliases for voice IDs (e.g. Iniya is deprecated on Falcon, Abirami is active)
+VOICE_ALIASES = {
+    "Iniya": "Abirami",
+    "iniya": "Abirami",
+    "ta-IN-iniya": "Abirami",
+}
+
+
 def generate_speech(text, voice_id, locale):
-    if not MURF_API_KEY or MURF_API_KEY == "YOUR_MURF_API_KEY_HERE":
+    murf_key = os.getenv("MURF_API_KEY")
+    if not murf_key or murf_key == "YOUR_MURF_API_KEY_HERE":
         raise RuntimeError("MURF_API_KEY environment variable is missing or not configured.")
+
+    voice_id = VOICE_ALIASES.get(voice_id, voice_id)
 
     url = "https://global.api.murf.ai/v1/speech/stream"
     headers = {
-        "api-key": MURF_API_KEY,
+        "api-key": murf_key,
         "Content-Type": "application/json",
     }
     data = {
@@ -85,7 +104,7 @@ def generate_speech(text, voice_id, locale):
         "channelType": "MONO",
     }
 
-    response = requests.post(url, headers=headers, json=data, timeout=30)
+    response = requests.post(url, headers=headers, json=data, timeout=45)
 
     if response.status_code == 200:
         return response.content
@@ -94,6 +113,7 @@ def generate_speech(text, voice_id, locale):
 
 
 def generate_description(place, answer_type, language):
+    client = get_gemini_client()
     if client is None:
         raise RuntimeError("GEMINI_API_KEY environment variable is missing or invalid.")
 
@@ -101,11 +121,33 @@ def generate_description(place, answer_type, language):
         raise ValueError(f"Unsupported answer type: {answer_type}")
 
     prompt = PROMPTS[answer_type].format(place=place, language=language)
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
-        contents=prompt,
-    )
-    return getattr(response, "text", str(response))
+
+    # Models supported by Google GenAI (gemini-3.5-flash-lite is the latest recommended)
+    models_to_try = [
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+    ]
+
+    last_error = None
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            text = getattr(response, "text", str(response))
+            if text and text.strip():
+                return text.strip()
+        except Exception as e:
+            last_error = e
+            print(f"Model {model_name} failed: {e}")
+            continue
+
+    raise RuntimeError(f"Gemini generation failed: {last_error}")
+
 
 
 # Route for root: serve Frontend index.html
