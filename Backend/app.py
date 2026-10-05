@@ -22,10 +22,16 @@ except ImportError:  # pragma: no cover - optional dependency for local tests
     genai = None
 
 # Configure Flask app to serve Frontend static assets
-FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Frontend"))
+possible_frontend_dirs = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Frontend")),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "Frontend")),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "static")),
+]
+FRONTEND_DIR = next((d for d in possible_frontend_dirs if os.path.exists(d)), possible_frontend_dirs[0])
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 CORS(app)
+
 
 MURF_API_KEY = os.getenv("MURF_API_KEY", "YOUR_MURF_API_KEY_HERE")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
